@@ -107,33 +107,25 @@ print(utils.time_business_days_between_dates("2024-05-01", "2024-05-25"))  # 17
 
 ceml = CemirUtils([[1, 2], [3, 4], [5]])
 # Çok katmanlı listeyi tek katmana indirger.
-ceml.list_flatten()  # Output: [1, 2, 3, 4, 5]
-
-
-# Veri listesindeki her bir elemanı verilen skaler değer ile çarpar.
-ceml = CemirUtils([1, 2, 3])
-ceml.list_multiply_by_scalar(2)  # Output: [2, 4, 6]
+print(ceml.list_flatten())  # Output: [1, 2, 3, 4, 5]
 
 
 ceml = CemirUtils([1, 2, 3])
 # Veri listesindeki her bir elemanı verilen skaler değer ile çarpar
-result = ceml.list_multiply_by_scalar(2)
-print(result)  # Output: [2, 4, 6]
+print(ceml.list_multiply_by_scalar(2))  # Output: [2, 4, 6]
 
 
 ceml = CemirUtils([1, 2, 3])
 # Veri listesindeki en büyük değeri döner.
-ceml.list_get_max_value()  # Output: 3
+print(ceml.list_get_max_value())  # Output: 3
 
 
 ceml = CemirUtils([1, 2, 2, 3])
 # Verilen değerin veri listesinde kaç kez geçtiğini sayar.
-result = ceml.list_get_frequency(2)
-print(result)  # Output: 2
+print(ceml.list_get_frequency(2)) # Output: 2
 
 
 # Sözlükteki veya sözlük listesindeki anahtarları döndürür.
-
 data = [{'a': 1}, {'b': 2}, {'a': 3}, {"name": "sivas", "age": 10}]
 cemd = CemirUtils(data)
 
