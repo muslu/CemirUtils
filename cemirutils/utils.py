@@ -303,6 +303,9 @@ class CemirUtils:
             date (str): Başlangıç tarihi (YYYY-MM-DD formatında).
             days (int): Eklenecek gün sayısı.
 
+        * Örnek:
+        >>> utils =CemirUtils()
+        >>> utils.time_add_days_to_date("2024-05-10", 100)
 
         Returns:
             datetime: Yeni tarih.
@@ -402,6 +405,10 @@ class CemirUtils:
 
         Args:
             date (str): Tarih (YYYY-MM-DD formatında).
+
+        * Örnek:
+        >>> utils =CemirUtils()
+        >>> print(utils.time_todatetime("2024-05-10"))
 
         Returns:
             str: Formatlanmış tarih.

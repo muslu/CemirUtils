@@ -9,13 +9,10 @@
 #
 
 from cemirutils.utils import CemirUtils
-# utils = CemirUtils()
-# for k in utils.getmethods():
-#     print(k)
+utils = CemirUtils()
+for k in utils.getmethods():
+    print(k)
 
-data = [{'a': 1}, {'b': 2}, {'a': 3}, {"name": "sivas", "age": 10}]
-cemd = CemirUtils(data)
-
-print(cemd.dict_get_keys())
-print(cemd.dict_filter_by_key('name'))
-print(cemd.dict_merge({'a': 1}, {'b': 2}))
+# utils =CemirUtils()
+print(utils.time_add_days_to_date("2024-05-10", 100))
+print(utils.time_todatetime("2024-05-10"))
