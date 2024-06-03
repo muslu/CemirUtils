@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='cemirutils',
-    version='0.4.2',
+    version='0.5.2',
     packages=find_packages(),
     install_requires=[],
     author='Cem Emir / Muslu Yüksektepe',

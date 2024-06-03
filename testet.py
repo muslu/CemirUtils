@@ -1,19 +1,21 @@
-from datetime import datetime
+# from cemirutils.utils import Dict2Dot
+#
+# data = {"name": "muslu", "age": 30, "cities": {"name": "sivas", "age": 10}, "listem": [1, 2, 3, 4, 5]}
+# dic = Dict2Dot(data)
+# print(dic.name)  # muslu
+# print(type(dic.cities), dic.cities)  # 10
+# print(dic.cities.age)  # 10
+# print(type(dic.listem), dic.listem)  # [1, 2, 3, 4, 5]
+#
 
-from cemirutils import CemirUtils
+from cemirutils.utils import CemirUtils
+# utils = CemirUtils()
+# for k in utils.getmethods():
+#     print(k)
 
-# Örnek kullanım
-utils = CemirUtils(data=False, dbname='test_db3', dbuser='postgres', dbpassword='dD5Yz6xE5m', dbport=5435, dbcreate_db_if_not_exists=True)
+data = [{'a': 1}, {'b': 2}, {'a': 3}, {"name": "sivas", "age": 10}]
+cemd = CemirUtils(data)
 
-# print(utils.psql_create_table('test_table_flat', 'id SERIAL PRIMARY KEY, name VARCHAR(100), surname VARCHAR(100)'))
-# print(utils.psql_create_table('test_table_json', 'id SERIAL PRIMARY KEY, dates DATE, content JSONB'))
-
-# print(utils.psql_insert('test_table_flat', ('id', 'name', 'surname'), (3, 'Muslu', 'Yüksektepe'), get_id=True))
-print(utils.psql_insert('test_table_json', ('id', 'dates', 'content'), (2, datetime.now(), {"age": 40, "city": "İzmir"}), get_id=True))
-print(utils.psql_read('test_table_json'))
-
-print(utils.psql_update('test_table_json', {'dates': datetime.now(), 'content': '{"age": 40, "city": "Sivas"}'}, 'id = 1', get_id=True))
-print(utils.psql_read('test_table_json'))
-
-print(utils.psql_delete('test_table_json', 'id = 1'))
-print(utils.psql_read('test_table_json'))
+print(cemd.dict_get_keys())
+print(cemd.dict_filter_by_key('name'))
+print(cemd.dict_merge({'a': 1}, {'b': 2}))

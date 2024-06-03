@@ -8,8 +8,20 @@ from http.server import SimpleHTTPRequestHandler, HTTPServer
 from urllib import request, parse
 
 
+class Dict2Dot(dict):
+    def __getattr__(self, key):
+        if key in self:
+            value = self[key]
+            if isinstance(value, dict):
+                return Dict2Dot(value)
+            return value
+        else:
+            raise AttributeError(f"'{self.__class__.__name__}' objesinde '{key}' anahtarı bulunamadı.")
+
+
 class CemirUtils:
-    def __init__(self, data, dbname, dbuser, dbpassword, dbhost='localhost', dbport=5432, dbcreate_db_if_not_exists=False):
+
+    def __init__(self, data=None, dbname=None, dbuser=None, dbpassword=None, dbhost='localhost', dbport=5432, timeout=3, dbcreate_db_if_not_exists=False):
         """
         CemirUtils sınıfının yapıcı fonksiyonu.
         Verilen veriyi sınıfın 'data' değişkenine atar.
@@ -23,6 +35,7 @@ class CemirUtils:
         self.dbpassword = dbpassword
         self.dbhost = dbhost
         self.dbport = dbport
+        self.timeout = timeout
 
         if dbcreate_db_if_not_exists:
             self.psql_create_database(dbname)
@@ -68,14 +81,22 @@ class CemirUtils:
             dbname = self.dbname
 
         command = f'PGPASSWORD={self.dbpassword} psql -h {self.dbhost} -p {self.dbport} -U {self.dbuser} -d {dbname} -c {json.dumps(query, ensure_ascii=False)}'
-        result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        if result.returncode != 0:
+
+        try:
+            result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=self.timeout)
+            if result.returncode != 0:
+                error_info = {
+                    "error": "Query failed",
+                    "message": result.stderr.strip()
+                }
+                return json.dumps(error_info, ensure_ascii=False)
+            return result.stdout.strip()
+        except subprocess.TimeoutExpired as e:
             error_info = {
-                "error": "Query failed",
-                "message": result.stderr.strip()
+                "error": "TimeOut",
+                "message": f"timed out"
             }
             return json.dumps(error_info, ensure_ascii=False)
-        return result.stdout.strip()
 
     def psql_insert(self, table_name, columns, values, get_id=False):
         """
@@ -208,7 +229,7 @@ class CemirUtils:
         except:
             return self.psql_execute_query(query)
 
-    def days_between_dates(self, date1, date2):
+    def time_days_between_dates(self, date1, date2):
         """
         İki tarih arasındaki gün sayısını hesaplar.
 
@@ -227,7 +248,7 @@ class CemirUtils:
         delta = d2 - d1
         return delta.days
 
-    def hours_minutes_seconds_between_times(self, time1, time2):
+    def time_hours_minutes_seconds_between_times(self, time1, time2):
         """
         İki zaman arasındaki saat, dakika ve saniye farkını hesaplar.
 
@@ -273,7 +294,7 @@ class CemirUtils:
         seconds = seconds % 60
         return days, hours, minutes, seconds
 
-    def add_days_to_date(self, date, days):
+    def time_add_days_to_date(self, date, days):
         """
         Belirtilen tarihe gün sayısı ekleyerek yeni bir tarih hesaplar.
 
@@ -291,7 +312,7 @@ class CemirUtils:
         new_date = d + timedelta(days=days)
         return new_date
 
-    def add_days_and_format(self, date, days):
+    def time_add_days_and_format(self, date, days):
         """
         Belirtilen tarihe gün sayısı ekleyip yeni tarihi istenilen dilde gün adı ile birlikte formatlar.
 
@@ -305,11 +326,11 @@ class CemirUtils:
         Returns:
             str: Formatlanmış yeni tarih ve gün adı.
         """
-        new_date = self.add_days_to_date(date, days)
+        new_date = self.time_add_days_to_date(date, days)
         formatted_date = new_date.strftime("%Y-%m-%d")
         return f"{formatted_date} ({new_date})"
 
-    def is_weekend(self, date):
+    def time_is_weekend(self, date):
         """
         Bir tarihin hafta sonu olup olmadığını kontrol eder.
 
@@ -325,7 +346,7 @@ class CemirUtils:
         d = datetime.strptime(date, date_format)
         return d.weekday() >= 5  # 5 = Cumartesi, 6 = Pazar
 
-    def is_leap_year(self, year):
+    def time_is_leap_year(self, year):
         """
         Bir yılın artık yıl olup olmadığını kontrol eder.
 
@@ -339,7 +360,7 @@ class CemirUtils:
         """
         return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
 
-    def days_in_month(self, year, month):
+    def time_days_in_month(self, year, month):
         """
         Bir ay içindeki gün sayısını döndürür.
 
@@ -354,7 +375,7 @@ class CemirUtils:
         """
         return monthrange(year, month)[1]
 
-    def next_weekday(self, date, weekday):
+    def time_next_weekday(self, date, weekday):
         """
         Bir tarihten sonraki belirli bir günün tarihini döndürür (örneğin, bir sonraki Pazartesi).
 
@@ -374,23 +395,19 @@ class CemirUtils:
             days_ahead += 7
         return d + timedelta(days=days_ahead)
 
-    def format_date_in_locale(self, date, locale='en', format='full'):
+    @staticmethod
+    def time_todatetime(date):
         """
-        Bir tarihi istenilen dilde ve formatta yazdırır.
-
+        Bir tarihi datetime türüne çevirir
 
         Args:
             date (str): Tarih (YYYY-MM-DD formatında).
-            locale (str): Dil kodu (varsayılan 'en').
-            format (str): Tarih formatı (varsayılan 'full').
-
 
         Returns:
             str: Formatlanmış tarih.
         """
-        date_format = "%Y-%m-%d"
-        d = datetime.strptime(date, date_format)
-        return d
+
+        return datetime.strptime(date, "%Y-%m-%d")
 
     def time_since(self, past_date):
         """
@@ -427,7 +444,7 @@ class CemirUtils:
             'seconds': seconds
         }
 
-    def business_days_between_dates(self, date1, date2):
+    def time_business_days_between_dates(self, date1, date2):
         """
         İki tarih arasındaki iş günü sayısını hesaplar.
 
@@ -447,7 +464,7 @@ class CemirUtils:
         business_days = sum(1 for day in day_generator if day.weekday() < 5)
         return business_days
 
-    def replace_multiple(self, text, replacements):
+    def str_replace_multiple(self, text, replacements):
         """
         Verilen metinde çoklu değiştirme işlemi yapar.
 
@@ -456,6 +473,10 @@ class CemirUtils:
             text (str): Değiştirilecek metin.
             replacements (dict): Değiştirilecek değer çiftleri (anahtar: eski değer, değer: yeni değer).
 
+        Örnek:
+
+        >>> utils = CemirUtils()
+        >>> print(utils.str_replace_multiple("asd muslu asd", {"asd": "muslu", "muslu": "emir"}))
 
         Returns:
             str: Değiştirilmiş metin.
@@ -464,7 +485,7 @@ class CemirUtils:
             text = text.replace(old, new)
         return text
 
-    def replace_with_last(self, text, values):
+    def str_replace_with_last(self, text, values):
         """
         Verilen metinde belirtilen tüm değerleri son değer ile değiştirir.
 
@@ -472,6 +493,11 @@ class CemirUtils:
         Args:
             text (str): Değiştirilecek metin.
             values (tuple): Değiştirilecek değerler.
+
+        Örnek:
+
+        >>> utils = CemirUtils()
+        >>> print(utils.str_replace_with_last("asd muslu asd", ("muslu", "emir"}))
 
 
         Returns:
@@ -484,7 +510,7 @@ class CemirUtils:
             text = text.replace(value, last_value)
         return text
 
-    def multiply_by_scalar(self, scalar):
+    def list_multiply_by_scalar(self, scalar):
         """
         Veri listesindeki her bir elemanı verilen skaler değer ile çarpar.
 
@@ -496,7 +522,7 @@ class CemirUtils:
 
         Örnek:
         >>> ceml = CemirUtils([1, 2, 3])
-        >>> ceml.multiply_by_scalar(2)
+        >>> ceml.list_multiply_by_scalar(2)
         [2, 4, 6]
         """
         if isinstance(self.data, list):
@@ -504,7 +530,7 @@ class CemirUtils:
         else:
             raise TypeError("Veri tipi liste olmalıdır.")
 
-    def get_frequency(self, value):
+    def list_get_frequency(self, value):
         """
         Verilen değerin veri listesinde kaç kez geçtiğini sayar.
 
@@ -516,7 +542,7 @@ class CemirUtils:
 
         Örnek:
         >>> ceml = CemirUtils([1, 2, 2, 3])
-        >>> ceml.get_frequency(2)
+        >>> ceml.list_get_frequency(2)
         2
         """
         if isinstance(self.data, list):
@@ -524,7 +550,7 @@ class CemirUtils:
         else:
             raise TypeError("Veri tipi liste olmalıdır.")
 
-    def reverse_list(self):
+    def list_reverse(self):
         """
         Veri listesini tersine çevirir.
 
@@ -533,7 +559,7 @@ class CemirUtils:
 
         Örnek:
         >>> ceml = CemirUtils([1, 2, 3])
-        >>> ceml.reverse_list()
+        >>> ceml.list_reverse()
         [3, 2, 1]
         """
         if isinstance(self.data, list):
@@ -541,7 +567,7 @@ class CemirUtils:
         else:
             raise TypeError("Veri tipi liste olmalıdır.")
 
-    def get_max_value(self):
+    def list_get_max_value(self):
         """
         Veri listesindeki en büyük değeri döner.
 
@@ -550,7 +576,7 @@ class CemirUtils:
 
         Örnek:
         >>> ceml = CemirUtils([1, 2, 3])
-        >>> ceml.get_max_value()
+        >>> ceml.list_get_max_value()
         3
         """
         if isinstance(self.data, list):
@@ -558,7 +584,7 @@ class CemirUtils:
         else:
             raise TypeError("Veri tipi liste olmalıdır.")
 
-    def get_min_value(self):
+    def list_get_min_value(self):
         """
         Veri listesindeki en küçük değeri döner.
 
@@ -567,7 +593,7 @@ class CemirUtils:
 
         Örnek:
         >>> ceml = CemirUtils([1, 2, 3])
-        >>> ceml.get_min_value()
+        >>> ceml.list_get_min_value()
         1
         """
         if isinstance(self.data, list):
@@ -575,34 +601,33 @@ class CemirUtils:
         else:
             raise TypeError("Veri tipi liste olmalıdır.")
 
-    def filter_by_key(self, key, value):
+    def dict_filter_by_key(self, key):
         """
-        Sözlükte veya sözlüklerin bulunduğu listede belirtilen anahtar ve değere sahip elemanları filtreler.
+        Sözlükte veya sözlüklerin bulunduğu listede belirtilen anahtara sahip elemanları filtreler.
 
         Parametreler:
         key: Filtreleme yapılacak anahtar.
-        value: Filtreleme yapılacak değer.
 
         Dönüş:
         dict, list: Filtrelenmiş veri.
 
         Örnek:
         >>> cemd = CemirUtils({'a': 1, 'b': 2, 'c': 3})
-        >>> cemd.filter_by_key('b', 2)
+        >>> cemd.dict_filter_by_key('b')
         {'b': 2}
 
         >>> ceml = CemirUtils([{'a': 1}, {'b': 2}, {'a': 3}])
-        >>> ceml.filter_by_key('a', 1)
-        [{'a': 1}]
+        >>> ceml.dict_filter_by_key('a')
+        [{'a': 1}, {'a': 3}]
         """
         if isinstance(self.data, dict):
-            return {k: v for k, v in self.data.items() if k == key and v == value}
+            return {k: v for k, v in self.data.items() if k == key}
         elif isinstance(self.data, list):
-            return [item for item in self.data if isinstance(item, dict) and item.get(key) == value]
+            return [item for item in self.data if isinstance(item, dict) and key in item]
         else:
             raise TypeError("Veri tipi sözlük veya sözlük listesi olmalıdır.")
 
-    def get_keys(self):
+    def dict_get_keys(self):
         """
         Sözlükteki veya sözlüklerin bulunduğu listedeki anahtarları döner.
 
@@ -611,11 +636,11 @@ class CemirUtils:
 
         Örnek:
         >>> cemd = CemirUtils({'a': 1, 'b': 2, 'c': 3})
-        >>> cemd.get_keys()
+        >>> cemd.dict_get_keys()
         ['a', 'b', 'c']
 
         >>> ceml = CemirUtils([{'a': 1}, {'b': 2}, {'a': 3}])
-        >>> ceml.get_keys()
+        >>> ceml.dict_get_keys()
         ['a', 'b', 'a']
         """
         if isinstance(self.data, dict):
@@ -625,7 +650,64 @@ class CemirUtils:
         else:
             raise TypeError("Veri tipi sözlük veya sözlük listesi olmalıdır.")
 
-    def flatten_list(self):
+    def dict_merge(self, *dicts):
+        """
+        Verilen sözlükleri birleştirir.
+
+        Parametreler:
+        *dicts (dict): Birleştirilecek sözlükler.
+
+        Dönüş:
+        dict: Birleştirilmiş sözlük.
+
+        Örnek:
+        >>> cemd = CemirUtils({})
+        >>> cemd.dict_merge({'a': 1}, {'b': 2})
+        {'a': 1, 'b': 2}
+        """
+        if all(isinstance(d, dict) for d in dicts):
+            merged = {}
+            for d in dicts:
+                merged.update(d)
+            return merged
+        else:
+            raise TypeError("Tüm parametreler sözlük olmalıdır.")
+
+    def list_filter_greater_than(self, threshold):
+        """
+        Belirtilen eşik değerinden büyük olan öğeleri filtreler.
+
+        Parametre:
+        threshold (int/float): Eşik değer.
+
+        Dönüş:
+        list: Eşik değerinden büyük olan öğeleri içeren liste.
+
+        Örnek:
+        >>> cem = CemirUtils([3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5])
+        >>> cem.list_filter_greater_than(5)
+        [9, 6]
+        """
+        return [x for x in self.data if x > threshold]
+
+    def list_filter_less_than(self, threshold):
+        """
+        Belirtilen eşik değerinden küçük olan öğeleri filtreler.
+
+        Parametre:
+        threshold (int/float): Eşik değer.
+
+        Dönüş:
+        list: Eşik değerinden küçük olan öğeleri içeren liste.
+
+        Örnek:
+        >>> cem = CemirUtils([3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5])
+        >>> cem.list_filter_less_than(4)
+        [3, 1, 1, 2, 3]
+        """
+        return [x for x in self.data if x < threshold]
+
+    def list_flatten(self):
         """
         Çok katmanlı listeyi tek katmana indirger.
 
@@ -642,64 +724,7 @@ class CemirUtils:
         else:
             raise TypeError("Veri tipi çok katmanlı liste olmalıdır.")
 
-    def merge_dicts(self, *dicts):
-        """
-        Verilen sözlükleri birleştirir.
-
-        Parametreler:
-        *dicts (dict): Birleştirilecek sözlükler.
-
-        Dönüş:
-        dict: Birleştirilmiş sözlük.
-
-        Örnek:
-        >>> ceml = CemirUtils({})
-        >>> ceml.merge_dicts({'a': 1}, {'b': 2})
-        {'a': 1, 'b': 2}
-        """
-        if all(isinstance(d, dict) for d in dicts):
-            merged = {}
-            for d in dicts:
-                merged.update(d)
-            return merged
-        else:
-            raise TypeError("Tüm parametreler sözlük olmalıdır.")
-
-    def filter_greater_than(self, threshold):
-        """
-        Belirtilen eşik değerinden büyük olan öğeleri filtreler.
-
-        Parametre:
-        threshold (int/float): Eşik değer.
-
-        Dönüş:
-        list: Eşik değerinden büyük olan öğeleri içeren liste.
-
-        Örnek:
-        >>> cem = CemirUtils([3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5])
-        >>> cem.filter_greater_than(5)
-        [9, 6]
-        """
-        return [x for x in self.data if x > threshold]
-
-    def filter_less_than(self, threshold):
-        """
-        Belirtilen eşik değerinden küçük olan öğeleri filtreler.
-
-        Parametre:
-        threshold (int/float): Eşik değer.
-
-        Dönüş:
-        list: Eşik değerinden küçük olan öğeleri içeren liste.
-
-        Örnek:
-        >>> cem = CemirUtils([3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5])
-        >>> cem.filter_less_than(4)
-        [3, 1, 1, 2, 3]
-        """
-        return [x for x in self.data if x < threshold]
-
-    def sum_values(self):
+    def list_sum_values(self):
         """
         Listedeki tüm sayısal değerlerin toplamını hesaplar.
 
@@ -708,12 +733,12 @@ class CemirUtils:
 
         Örnek:
         >>> cem = CemirUtils([3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5])
-        >>> cem.sum_values()
+        >>> cem.list_sum_values()
         44
         """
         return sum(self.data)
 
-    def average(self):
+    def list_average(self):
         """
         Listedeki sayısal değerlerin ortalamasını hesaplar.
 
@@ -722,12 +747,12 @@ class CemirUtils:
 
         Örnek:
         >>> cem = CemirUtils([3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5])
-        >>> cem.average()
+        >>> cem.list_average()
         4.0
         """
         return sum(self.data) / len(self.data) if self.data else 0
 
-    def head(self, n=5):
+    def list_head(self, n=5):
         """
         Listenin ilk n elemanını döndürür.
         Args:
@@ -737,7 +762,7 @@ class CemirUtils:
         """
         return self.data[:n]
 
-    def tail(self, n=5):
+    def list_tail(self, n=5):
         """
         Listenin son n elemanını döndürür.
         Args:
@@ -747,7 +772,7 @@ class CemirUtils:
         """
         return self.data[-n:]
 
-    def main(self, n=5):
+    def list_main(self, n=5):
         """
         Listenin ortadaki elemanlarını döndürür.
         Eğer listenin uzunluğu 2n veya daha küçükse tüm listeyi döndürür.
@@ -760,7 +785,7 @@ class CemirUtils:
             return self.data
         return self.data[n:-n]
 
-    def unique_values(self):
+    def list_unique_values(self):
         """
         Listenin benzersiz elemanlarını döndürür.
         Returns:
@@ -768,7 +793,7 @@ class CemirUtils:
         """
         return list(set(self.data))
 
-    def sort_asc(self):
+    def list_sort_asc(self):
         """
         Listeyi artan sırada sıralar.
         Returns:
@@ -776,7 +801,7 @@ class CemirUtils:
         """
         return sorted(self.data)
 
-    def sort_desc(self):
+    def list_sort_desc(self):
         """
         Listeyi azalan sırada sıralar.
         Returns:
