@@ -4,15 +4,15 @@ from setuptools import setup, find_packages
 
 setup(
     name='cemirutils',
-    version='0.3.1',
+    version='0.4.1',
     packages=find_packages(),
     install_requires=[],
     author='Cem Emir / Muslu Yüksektepe',
     author_email='musluyuksektepe@gmail.com',
-    description='Basit veri işleme yardımcıları',
+    description='Basit veri işleme ve SQL yardımcıları',
     long_description=open('README.md', encoding="utf-8").read(),
     long_description_content_type='text/markdown',
-    url='https://github.com/cememir/cemirutils',  # GitHub repo URL'si
+    url='https://github.com/cememir/cemirutils',
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',
