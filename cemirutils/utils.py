@@ -49,7 +49,81 @@ class CemirUtils:
         """
         return [method for method in dir(CemirUtils) if callable(getattr(CemirUtils, method)) and not method.startswith("__")]
 
-    def listen_for_icmp(self, print_query=False, insert_db=True):
+    # Linux komutlarını Python üzerinden çağırarak işlem yapmak için kullanılır.
+
+    def linux_ls(self, path="."):
+        """
+        List files and directories in the given path.
+        """
+        return subprocess.run(["ls", "-l", path], capture_output=True, text=True).stdout
+
+    def linux_cat(self, filename):
+        """
+        Display the contents of a file.
+        """
+        return subprocess.run(["cat", filename], capture_output=True, text=True).stdout
+
+    def linux_touch(self, filename):
+        """
+        Create an empty file or update the access and modification times of a file.
+        """
+        return subprocess.run(["touch", filename], capture_output=True, text=True).stdout
+
+    def linux_cp(self, source, destination):
+        """
+        Copy files or directories from source to destination.
+        """
+        return subprocess.run(["cp", "-r", source, destination], capture_output=True, text=True).stdout
+
+    def linux_mv(self, source, destination):
+        """
+        Move or rename files or directories from source to destination.
+        """
+        return subprocess.run(["mv", source, destination], capture_output=True, text=True).stdout
+
+    def linux_rm(self, path):
+        """
+        Remove files or directories.
+        """
+        return subprocess.run(["rm", "-r", path], capture_output=True, text=True).stdout
+
+    def linux_mkdir(self, directory):
+        """
+        Create a new directory.
+        """
+        return subprocess.run(["mkdir", directory], capture_output=True, text=True).stdout
+
+    def linux_rmdir(self, directory):
+        """
+        Remove an empty directory.
+        """
+        return subprocess.run(["rmdir", directory], capture_output=True, text=True).stdout
+
+    def linux_cut(self, delimiter, fields, filename):
+        """
+        Extract fields from a file based on a delimiter.
+        """
+        return subprocess.run(["cut", f"-d{delimiter}", f"-f{fields}", filename], capture_output=True, text=True).stdout
+
+    def linux_gzip(self, filename):
+        """
+        Compress or decompress files using gzip.
+        """
+        return subprocess.run(["gzip", filename], capture_output=True, text=True).stdout
+
+    def linux_find(self, path, filename):
+        """
+        Search for files in a directory hierarchy.
+        """
+        return subprocess.run(["find", path, "-name", filename], capture_output=True, text=True).stdout
+
+    def linux_grep(self, pattern, filename):
+        """
+        Search for a pattern in a file.
+        """
+        return subprocess.run(["grep", pattern, filename], capture_output=True, text=True).stdout
+
+    def tcp_listen_for_icmp(self, print_query=False, insert_db=True):
         """
         NOT: scriptin çalışması için sudo gerektirir.
 
