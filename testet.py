@@ -1,8 +1,19 @@
-from cemirutils.utils import CemirUtils
+import http.server as SimpleHTTPServer
+import socketserver as SocketServer
+import logging
 
-utils = CemirUtils(data=False, dbname='test_db3', dbuser='postgres', dbpassword='asd', dbport=5435, dbcreate_db_if_not_exists=False)
+PORT = 8000
 
-asd = utils.listen_for_icmp(print_query=True, insert_db=True)
-print(asd)
+class GetHandler(
+        SimpleHTTPServer.SimpleHTTPRequestHandler
+        ):
+
+    def do_GET(self):
+        logging.error(self.headers)
+        SimpleHTTPServer.SimpleHTTPRequestHandler.do_GET(self)
 
 
+Handler = GetHandler
+httpd = SocketServer.TCPServer(("", PORT), Handler)
+
+httpd.serve_forever()
