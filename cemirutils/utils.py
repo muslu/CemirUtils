@@ -1,6 +1,8 @@
 import base64
 import json
+import socket
 import ssl
+import struct
 import subprocess
 from calendar import monthrange
 from datetime import datetime, timedelta
@@ -46,6 +48,93 @@ class CemirUtils:
         """
         return [method for method in dir(CemirUtils) if callable(getattr(CemirUtils, method)) and not method.startswith("__")]
 
+    def listen_for_icmp(self, print_query=False, insert_db=True):
+        """
+        NOT: scriptin çalışması için sudo gerektirir.
+
+        Örnek Servis:
+
+        sudo nano /etc/systemd/system/ping_logger.service
+
+            [Unit]
+            Description=Ping Logger Service
+            After=network.target
+
+            [Service]
+            ExecStart=/usr/bin/python3 /path/to/ping_logger.py
+            Restart=always
+            User=root
+            Group=root
+
+            [Install]
+            WantedBy=multi-user.target
+
+        * sudo systemctl daemon-reload
+        * sudo systemctl enable ping_logger
+        * sudo systemctl start ping_logger
+
+        :param insert_db: bool
+        :param print_query: bool
+        :return:
+        """
+        if insert_db:
+            self.psql_insert_raw("""CREATE TABLE ping_log (id SERIAL PRIMARY KEY, contents JSONB NOT NULL);""")
+
+        # Raw soket oluşturma
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+        except:
+            print("raw soket dinleme işlemleri için sudo yetkisi gerekir!!")
+            exit(1)
+
+        while True:
+            # Paket alımı
+            packet, addr = sock.recvfrom(65565)
+            packet_length = len(packet)
+
+            # IP başlığı ayrıştırma
+            ip_header = packet[0:20]
+            iph = struct.unpack('!BBHHHBBH4s4s', ip_header)
+            version_ihl = iph[0]
+            version = version_ihl >> 4
+            ihl = version_ihl & 0xF
+            iph_length = ihl * 4
+            ttl = iph[5]
+            protocol = iph[6]
+            source_ip = socket.inet_ntoa(iph[8])
+            dest_ip = socket.inet_ntoa(iph[9])
+
+            # ICMP başlığı ayrıştırma
+            icmp_header = packet[iph_length:iph_length + 8]
+            icmph = struct.unpack('!BBHHH', icmp_header)
+            icmp_type = icmph[0]
+            code = icmph[1]
+            checksum = icmph[2]
+            packet_id = icmph[3]
+            sequence = icmph[4]
+
+            if icmp_type == 8:  # Ping Request
+                timestamp = datetime.now()
+                contents = {
+                    "sequence": sequence,
+                    "dest_ip": dest_ip,
+                    "source_ip": source_ip,
+                    "ttl": ttl,
+                    "timestamp": timestamp.isoformat(),
+                    "packet_length": packet_length,
+
+                    # "icmp_type": icmp_type,
+                    # "checksum": checksum,
+                    # "packet_id": packet_id,
+                    # "protocol": protocol
+                }
+
+                if insert_db:
+                    self.psql_insert_raw(f"""INSERT INTO ping_log (contents) VALUES ('{json.dumps(contents)}');""")
+
+                if print_query:
+                    print(contents)
+
     def psql_parse_psql_output(self, output):
         """
         psql komutunun çıktısını parse ederek dict yapısına çevirir.
@@ -80,7 +169,8 @@ class CemirUtils:
         if dbname is None:
             dbname = self.dbname
 
-        command = f'PGPASSWORD={self.dbpassword} psql -h {self.dbhost} -p {self.dbport} -U {self.dbuser} -d {dbname} -c {json.dumps(query, ensure_ascii=False)}'
+        query = query.replace("\n", "").strip()
+        command = f'''PGPASSWORD={self.dbpassword} psql -h {self.dbhost} -p {self.dbport} -U {self.dbuser} -d {dbname} -c {json.dumps(query, ensure_ascii=False)}'''
 
         try:
             result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=self.timeout)
@@ -97,6 +187,10 @@ class CemirUtils:
                 "message": f"timed out"
             }
             return json.dumps(error_info, ensure_ascii=False)
+
+    def psql_insert_raw(self, query, print_query=False):
+        if print_query: print(query)
+        return self.psql_execute_query(query)
 
     def psql_insert(self, table_name, columns, values, get_id=False):
         """
