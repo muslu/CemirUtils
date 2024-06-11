@@ -73,4 +73,4 @@ dmypy.json
 .pyre/
 .pytype/
 cython_debug/
-/upload2pypi.sh
+/wheelit.txt
