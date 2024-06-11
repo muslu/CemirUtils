@@ -2,30 +2,82 @@
 
 # CemirUtils
 
-CemirUtils, basit veri işleme işlevlerini içeren bir Python yardımcı kütüphanesidir.
+## CemirUtils;
+### Linux ve Pythonda sık kullanılan tüm komut ve kütüphaneleri tek yerden, basit veri işleme işlevlerini içeren bir Python yardımcı kütüphanesidir.
 
 ## Kurulum
 
-Öncelikle CemirUtils kütüphanesini Python projesine eklemek için aşağıdaki adımları izleyin:
-
 ```bash
-pip install cemirutils
+wget https://bootstrap.pypa.io/get-pip.py
+
+## Kurulum şekilleri
+python3.9 get-pip.py pip cemirutils
+sudo python3.9 get-pip.py pip cemirutils
+
+## Güncelleme
+pip install -U pip cemirutils
+sudo pip install -U pip cemirutils
+python3.9 -m pip install -U pip cemirutils
+sudo python3.9 -m pip install -U pip cemirutils
+
+## Kontrol
+pip show cemirutils
+pip freeze | grep cemir
 ````
 
 
-## Kullanım
+# Kullanım Örnekleri
 
 
-* PostgreSQL için CRUD işlemleri.
+PING/ICMP takip ve dbye kayıt ettirmek.
+
+```shell
+
+sudo python3.9 -m pip install -U cemirutils # sudo yetkili (root gibi) kullanıcı ile pip paketi kurulmalı
+
+sudo nano /usr/bin/ping_logger.py
+
+from cemirutils import CemirUtils
+utils = CemirUtils(data=False, dbname='test_db3', dbuser='postgres', dbpassword='asd', dbport=5435, dbcreate_db_if_not_exists=True)
+utils.listen_for_icmp(print_query=True, insert_db=True)
+```
+
+```shell
+sudo nano /etc/systemd/system/ping_logger.service
+
+[Unit]
+Description=Ping Logger Service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3.9 /usr/bin/ping_logger.py
+WorkingDirectory=/usr/bin/
+Restart=always
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```shell
+sudo chmod +x /usr/bin/ping_logger.py
+sudo systemctl daemon-reload
+sudo systemctl enable ping_logger
+sudo systemctl restart ping_logger
+sudo systemctl status ping_logger
+journalctl -xe
+```
+
+
+
+
+
+
+## PostgreSQL için CRUD işlemleri.
 
 ```python
-from datetime import datetime
-from cemirutils import CemirUtils
 
-# ['dict_filter_by_key', 'dict_get_keys', 'dict_get_value', 'dict_merge', 'getmethods', 'http_delete', 'http_get', 'http_patch', 'http_post', 'http_put', 'http_server', 'list_average', 'list_filter_greater_than', 'list_filter_less_than', 'list_flatten', 'list_get_frequency', 'list_get_max_value', 'list_get_min_value', 'list_head', 'list_main', 'list_multiply_by_scalar', 'list_reverse', 'list_sort_asc', 'list_sort_desc', 'list_sum_values', 'list_tail', 'list_unique_values', 'psql_create_database', 'psql_create_table', 'psql_delete', 'psql_execute_query', 'psql_insert', 'psql_parse_psql_output', 'psql_read', 'psql_update', 'str_replace_multiple', 'str_replace_with_last', 'time_add_days_and_format', 'time_add_days_to_date', 'time_business_days_between_dates', 'time_days_between_dates', 'time_days_in_month', 'time_hours_minutes_seconds_between_times', 'time_is_leap_year', 'time_is_weekend', 'time_next_weekday', 'time_since', 'time_todatetime', 'time_until_date']
-
-
-# Örnek kullanım
 utils = CemirUtils(data=False, dbname='test_db3', dbuser='postgres', dbpassword='', dbport=5435, dbcreate_db_if_not_exists=True)
 
 # print(utils.psql_create_table('test_table_flat', 'id SERIAL PRIMARY KEY, name VARCHAR(100), surname VARCHAR(100)'))
@@ -42,8 +94,7 @@ print(utils.psql_delete('test_table_json', 'id = 1'))
 print(utils.psql_read('test_table_json'))
 ```
 
-Kütüphane, farklı veri işleme işlevlerini sağlayan `CemirUtils` sınıfını içerir.
-* Örneğin:
+## Kütüphane, farklı veri işleme işlevlerini sağlayan `CemirUtils` sınıfını içerir.
 
 ```python
 from cemirutils import CemirUtils

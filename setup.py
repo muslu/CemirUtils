@@ -4,12 +4,12 @@ from setuptools import setup, find_packages
 
 setup(
     name='cemirutils',
-    version='0.6.3',
+    version='0.6.4',
     packages=find_packages(),
     install_requires=[],
-    author='Cem Emir / Muslu Yüksektepe',
-    author_email='musluyuksektepe@gmail.com',
-    description='Basit veri işleme, network komutları ve SQL yardımcıları',
+    author='Cem Emir Yüksektepe / Muslu Yüksektepe',
+    author_email='cememir2017@gmail.com, musluyuksektepe@gmail.com',
+    description='Linux ve Pythonda sık kullanılan tüm komut ve kütüphaneleri tek yerden, basit veri işleme işlevlerini içeren bir Python yardımcı kütüphanesidir.',
     long_description=open('README.md', encoding="utf-8").read(),
     long_description_content_type='text/markdown',
     url='https://github.com/cememir/cemirutils',
@@ -18,5 +18,5 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
     ],
-    python_requires='>=3.6',
+    python_requires='>=3.9',
 )
