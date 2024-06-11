@@ -32,9 +32,6 @@ pip freeze | grep cemir
 PING/ICMP takip ve dbye kayıt ettirmek.
 
 ```shell
-
-sudo python3.9 -m pip install -U cemirutils # sudo yetkili (root gibi) kullanıcı ile pip paketi kurulmalı
-
 sudo nano /usr/bin/ping_logger.py
 
 from cemirutils import CemirUtils
