@@ -340,10 +340,10 @@ class CemirUtils:
 
         query += ";"
 
-        print("query", query)
         result = self.psql_parse_psql_output(self.psql_execute_query(query))
 
         if len(result) == 1:
+            print(result[0], type(result[0]))
             return result[0]
         return result
 
