@@ -1,44 +1,16 @@
-from cemirutils import CemirUtils
+from cemirutils.utils import CemirUtils
 
 cemir_utils = CemirUtils()
 
+utils = CemirUtils(data=False, dbname='test_db3', dbuser='postgres', dbpassword='', dbport=5437, dbcreate_db_if_not_exists=False)
 
-utils = CemirUtils()
+# print(utils.psql_insert('test_table_json', ('id', 'dates', 'content'), (2, datetime.now(), {"age": 41, "city": "İzmir"}), get_id=True))
 
-# Dosya ve dizinleri listeleme örneği
-print(utils.linux_ls("."))
+# print(utils.psql_read('test_table_json'))
 
+asd = utils.psql_read(table_name='test_table_json', columns="content", condition="content ->> 'age' = '40'")
+# asd = utils.psql_read(table_name='test_table_json', columns="content", condition="content ->> 'age' like '%4%'")
+print(type(asd), asd)
 
-# Dosya oluşturma örneği
-print(utils.linux_touch("new_file.txt"))
-
-# Dosyayı gzip ile sıkıştırma örneği
-print(utils.linux_gzip("new_file.txt"))
-
-# Dosya içeriğini görüntüleme örneği
-print(utils.linux_cat("new_file.txt"))
-
-# Dosya kopyalama örneği
-print(utils.linux_cp("new_file.txt", "destination.txt"))
-
-# Dosya taşıma örneği
-print(utils.linux_mv("new_file.txt", "/tmp/"))
-
-# Dosya silme örneği
-# print(utils.linux_rm("new_file.txt"))
-
-# Yeni bir dizin oluşturma örneği
-print(utils.linux_mkdir("new_directory"))
-
-# Boş bir dizini silme örneği
-print(utils.linux_rmdir("new_directory"))
-
-# Dosyadan alanları ayırma örneği
-print(utils.linux_cut("\t", "1,3", "data.txt"))
-
-
-# Dizin içinde dosya arama örneği
-print(utils.linux_find("/", "new_file.txt"))
-
-# Dosyada desen arama örneği
-print(utils.linux_grep("a", "new_file.txt"))
+# asdd = Dict2Dot(asd[0])
+# print(type(asd), asdd.id)

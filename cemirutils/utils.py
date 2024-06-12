@@ -211,6 +211,7 @@ class CemirUtils:
                     print(contents)
 
     def psql_parse_psql_output(self, output):
+
         """
         psql komutunun çıktısını parse ederek dict yapısına çevirir.
 
@@ -328,32 +329,23 @@ class CemirUtils:
         query = f"CREATE TABLE {table_name} ({schema});"
         return self.psql_execute_query(query)
 
-    def psql_read(self, table_name, columns='*', condition=None, jsonb_field=None, jsonb_key=None):
-        """
-        Veritabanından kayıt okur.
-
-        Args:
-            table_name (str): Tablo adı.
-            columns (str or tuple): Kolon adları veya * (örnek: "*" veya ("id", "name")).
-            condition (str): Koşul (örnek: "id = 1").
-            jsonb_field (str, optional): JSONB alan adı.
-            jsonb_key (str, optional): JSONB alanındaki anahtar adı.
-
-        Returns:
-            str: Sorgu sonucu veya JSON formatında hata bilgisi.
-        """
+    def psql_read(self, table_name, columns='*', condition=None):
         if isinstance(columns, tuple):
             columns = ', '.join(columns)
 
         query = f"SELECT {columns} FROM {table_name}"
-        if jsonb_field and jsonb_key:
-            query = f"SELECT {columns}, {jsonb_field} ->> '{jsonb_key}' AS {jsonb_key} FROM {table_name}"
 
         if condition:
             query += f" WHERE {condition}"
+
         query += ";"
 
-        return self.psql_parse_psql_output(self.psql_execute_query(query))
+        print("query", query)
+        result = self.psql_parse_psql_output(self.psql_execute_query(query))
+
+        if len(result) == 1:
+            return result[0]
+        return result
 
     def psql_update(self, table_name, updates, condition, get_id=False):
         """
@@ -393,8 +385,10 @@ class CemirUtils:
         query = f"DELETE FROM {table_name} WHERE {condition};"
         try:
             result = int(self.psql_execute_query(query).split()[1])
-            if result >= 0:
-                return {"error": False}
+            if result == 0:
+                return {"error": True, "status": "record_not_found"}
+            if result > 0:
+                return {"error": False, "status": "record_deleted"}
         except:
             return self.psql_execute_query(query)
 
@@ -1025,7 +1019,6 @@ class CemirUtils:
         print(f"Starting HTTP server on http://{ip}:{port}")
         httpd.serve_forever()
 
-
     def http_send_request(self, url, method='GET', headers=None, data=None, destination=None):
         """
         Send an HTTP request to the given URL with the specified method, headers, and data,
@@ -1052,7 +1045,6 @@ class CemirUtils:
                 return json.dumps(result, indent=4)
         except Exception as e:
             return f"Failed to send request to {url}, error: {str(e)}"
-
 
     def http_get(self, url, params=None, headers=None, verify_ssl=True):
         """
@@ -1189,4 +1181,3 @@ class CemirUtils:
             return json.loads(content)
         else:
             return content
-
