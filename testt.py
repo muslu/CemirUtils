@@ -1,4 +1,4 @@
-from cemirutils.utils import CemirUtils
+from cemirutils.utils import CemirUtils, Dict2Dot
 
 cemir_utils = CemirUtils()
 

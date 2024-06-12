@@ -74,6 +74,7 @@ journalctl -xe
 ## PostgreSQL için CRUD işlemleri.
 
 ```python
+from cemirutils import CemirUtils, Dict2Dot
 
 utils = CemirUtils(data=False, dbname='test_db3', dbuser='postgres', dbpassword='', dbport=5435, dbcreate_db_if_not_exists=True)
 
@@ -86,6 +87,14 @@ print(utils.psql_read('test_table_json'))
 
 print(utils.psql_update('test_table_json', {'dates': datetime.now(), 'content': '{"age": 40, "city": "Sivas"}'}, 'id = 1', get_id=True))
 print(utils.psql_read('test_table_json'))
+
+asd = utils.psql_read(table_name='test_table_json', columns="content", condition="content ->> 'age' = '40'")
+# asd = utils.psql_read(table_name='test_table_json', columns="content", condition="content ->> 'age' like '%4%'")
+print(type(asd), asd)
+
+# asdd = Dict2Dot(asd[0])
+# print(type(asd), asdd.id)
+
 
 print(utils.psql_delete('test_table_json', 'id = 1'))
 print(utils.psql_read('test_table_json'))
