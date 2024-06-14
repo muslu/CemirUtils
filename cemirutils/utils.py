@@ -1,9 +1,12 @@
 import base64
+import csv
 import json
-import socket
+import os
+import sqlite3
 import ssl
-import struct
 import subprocess
+import urllib.request
+import zipfile
 from calendar import monthrange
 from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, HTTPServer
@@ -21,9 +24,317 @@ class Dict2Dot(dict):
             raise AttributeError(f"'{self.__class__.__name__}' objesinde '{key}' anahtarı bulunamadı.")
 
 
+class IPGeolocation:
+    def __init__(self):
+        self.database_url = "https://download.ip2location.com/lite/IP2LOCATION-LITE-DB1.CSV.ZIP"
+        self.database_file = "IP2LOCATION-LITE-DB1.CSV"
+        self.download_path = os.path.join(os.getcwd(), "ip_database.zip")
+        self.db_file = os.path.join(os.getcwd(), "ip_geolocation.db")
+        self.connection = None
+        self.cursor = None
+
+    def ip_to_int(self, ip):
+        parts = ip.split('.')
+        return int(parts[0]) * 256 ** 3 + int(parts[1]) * 256 ** 2 + int(parts[2]) * 256 + int(parts[3])
+
+    def int_to_ip(self, ip_int):
+        octet_1 = ip_int // (256 ** 3) % 256
+        octet_2 = ip_int // (256 ** 2) % 256
+        octet_3 = ip_int // 256 % 256
+        octet_4 = ip_int % 256
+        return f"{octet_1}.{octet_2}.{octet_3}.{octet_4}"
+
+    def download_database(self, force_download=False):
+        """
+        IP2Location veritabanını indirir.
+
+        Args:
+            force_download (bool): Zip dosyasını yeniden indirme zorunluluğu.
+        """
+        try:
+            if force_download or not os.path.isfile(self.database_file):
+                # Veritabanı dosyasını indir
+                print("Veritabanı dosyasını indiriyor...")
+                urllib.request.urlretrieve(self.database_url, self.download_path)
+                print("Veritabanı dosyasını indirildi!")
+
+                # Zip dosyasını çıkart
+                with zipfile.ZipFile(self.download_path, "r") as zip_ref:
+                    zip_ref.extractall(os.getcwd())
+        except Exception as e:
+            print(f"Hata oluştu: {e}")
+
+    def create_sqlite_db(self):
+        """
+        SQLite veritabanını oluşturur ve Csv dosyasını içine aktarır.
+        """
+        try:
+            self.connection = sqlite3.connect(self.db_file)
+            self.cursor = self.connection.cursor()
+
+            print("SQlite Veritabanı Tabloyu oluşturuluyor...")
+            # Tabloyu oluştur
+            self.cursor.execute('''CREATE TABLE IF NOT EXISTS ip_geolocation
+                        (ip_start INTEGER PRIMARY KEY,
+                        ip_end INTEGER,
+                        country_code TEXT,
+                        country_name TEXT)''')
+
+            # Csv dosyasını oku ve veritabanına aktar
+            with open(self.database_file, "r", encoding="utf-8") as csvfile:
+                csv_reader = csv.reader(csvfile)
+                next(csv_reader)  # Başlık satırını atla
+                for row in csv_reader:
+                    self.cursor.execute("INSERT INTO ip_geolocation VALUES (?, ?, ?, ?)", row)
+
+            print("SQlite Veritabanı Tabloyu oluşturdu!")
+
+            # Değişiklikleri kaydet
+            self.connection.commit()
+        except Exception as e:
+            print(f"Hata oluştu: {e}")
+
+    def get_ip_location(self, ip_address, force_download=False):
+        """
+        Verilen IP adresinin lokasyon bilgisini döndürür.
+
+        Args:
+            ip_address (str): IP adresi.
+            force_download (bool): Zip dosyasını yeniden indirme zorunluluğu.
+
+        Returns:
+            str: IP adresinin lokasyon bilgisi.
+        """
+        try:
+            # SQLite veritabanını oluştur (eğer daha önce oluşturulmadıysa)
+            if not os.path.isfile(self.db_file) or force_download:
+                self.download_database(force_download)
+                self.create_sqlite_db()
+
+            # IP adresinin lokasyon bilgisini sorgula
+            print("IP adresinin lokasyon bilgisini sorgula...")
+            self.connection = sqlite3.connect(self.db_file)
+            self.cursor = self.connection.cursor()
+
+            # SQLite sorgusu
+            query = "SELECT * FROM ip_geolocation WHERE ip_start <= ? AND ip_end >= ?"
+            ip_int = self.ip_to_int(ip_address)
+            self.cursor.execute(query, (ip_int, ip_int))
+            row = self.cursor.fetchone()
+            if row:
+                return {"status": True, "ip_address": ip_address, "ipint": ip_int, "country_code": row[2], "country_name": row[3]}
+            else:
+                return {"status": False, "ip_address": ip_address}
+        except Exception as e:
+            print(f"Hata oluştu: {e}")
+            return None
+
+
+class CemirPostgreSQL:
+    def __init__(self, dbhost, dbport, dbuser, dbpassword, dbname, timeout=10, dbcreate_db_if_not_exists=False):
+        self.dbhost = dbhost
+        self.dbport = dbport
+        self.dbuser = dbuser
+        self.dbpassword = dbpassword
+        self.dbname = dbname
+        self.timeout = timeout
+        self.dbcreate_db_if_not_exists = dbcreate_db_if_not_exists
+
+        if dbcreate_db_if_not_exists:
+            self.create_database(dbname)
+
+    def get_methods(self):
+        """
+        CemirPostgreSQL sınıfının mevcut tüm metodlarının isimlerini yazdırır.
+        """
+        return [method for method in dir(CemirPostgreSQL) if callable(getattr(CemirPostgreSQL, method)) and not method.startswith("__")]
+
+    def parse_output(self, output):
+
+        """
+        psql komutunun çıktısını parse ederek dict yapısına çevirir.
+
+        Args:
+            output (str): psql komutunun çıktısı.
+
+        Returns:
+            dict: Dict formatında çıktı.
+        """
+        lines = output.strip().split('\n')
+        headers = lines[0].split('|')
+        data = []
+
+        for line in lines[2:-1]:  # İlk iki satır ve son satır başlık ve ayırıcılar olduğu için atlanır
+            values = line.split('|')
+            data.append({header.strip(): value.strip() for header, value in zip(headers, values)})
+
+        return data
+
+    def execute_query(self, query, dbname=None):
+        """
+        Veritabanına SQL sorgusu gönderir ve sonucu döndürür.
+
+        Args:
+            query (str): SQL sorgusu.
+            dbname (str, optional): Veritabanı adı. Eğer verilmezse, self.dbname kullanılır.
+
+        Returns:
+            str: Sorgu sonucu veya JSON formatında hata bilgisi.
+        """
+        if dbname is None:
+            dbname = self.dbname
+
+        query = query.replace("\n", "").strip()
+        command = f'''PGPASSWORD={self.dbpassword} psql -h {self.dbhost} -p {self.dbport} -U {self.dbuser} -d {dbname} -c {json.dumps(query, ensure_ascii=False)}'''
+
+        try:
+            result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=self.timeout)
+            if result.returncode != 0:
+                error_info = {
+                    "error": "Query failed",
+                    "message": result.stderr.strip()
+                }
+                return json.dumps(error_info, ensure_ascii=False)
+            return result.stdout.strip()
+        except subprocess.TimeoutExpired as e:
+            error_info = {
+                "error": "TimeOut",
+                "message": f"timed out"
+            }
+            return json.dumps(error_info, ensure_ascii=False)
+
+    def raw(self, query, print_query=False):
+        if print_query: print(query)
+        return self.execute_query(query)
+
+    def insert(self, table_name, columns, values, get_id=False):
+        """
+        Veritabanına yeni kayıt ekler.
+
+        Args:
+            table_name (str): Tablo adı.
+            columns (tuple): Kolon adları (örnek: ("id", "name", "data")).
+            values (tuple): Kolon değerleri (örnek: (1, "John Doe", {"age": 30, "city": "Istanbul"})).
+            get_id (bool): İşlem yapılan ID
+
+        Returns:
+            str: Sorgu sonucu veya JSON formatında hata bilgisi.
+        """
+        columns_str = ', '.join(columns)
+
+        formatted_values = []
+        for value in values:
+            if isinstance(value, dict):
+                formatted_values.append(f"'{json.dumps(value)}'::jsonb")
+            else:
+                formatted_values.append(f"'{value}'")
+
+        values_str = ', '.join(formatted_values)
+        query = f"INSERT INTO {table_name} ({columns_str}) VALUES ({values_str})"
+        if get_id:
+            query += f" RETURNING id;"
+            try:
+                result = self.execute_query(query).split()[2]
+                return {"error": False, "id": int(result)}
+            except ValueError:
+                return self.execute_query(query)
+
+        return self.execute_query(query)
+
+    def create_database(self, dbname):
+        """
+        Belirtilen ad ile yeni bir veritabanı oluşturur.
+
+        Args:
+            dbname (str): Oluşturulacak veritabanının adı.
+
+        Returns:
+            str: Sorgu sonucu veya JSON formatında hata bilgisi.
+        """
+        query = f"CREATE DATABASE {dbname};"
+        return self.execute_query(query, dbname='postgres')
+
+    def create_table(self, table_name, schema):
+        """
+        Veritabanında tablo oluşturur.
+
+        Args:
+            table_name (str): Tablo adı.
+            schema (str): Tablo şeması (örnek: "id SERIAL PRIMARY KEY, name VARCHAR(100), data JSONB").
+
+        Returns:
+            str: Sorgu sonucu veya JSON formatında hata bilgisi.
+        """
+        query = f"CREATE TABLE {table_name} ({schema});"
+        return self.execute_query(query)
+
+    def read(self, table_name, columns='*', condition=None):
+        if isinstance(columns, tuple):
+            columns = ', '.join(columns)
+
+        query = f"SELECT {columns} FROM {table_name}"
+
+        if condition:
+            query += f" WHERE {condition}"
+
+        query += ";"
+
+        result = self.parse_output(self.execute_query(query))
+
+        if len(result) == 1:
+            print(result[0], type(result[0]))
+            return result[0]
+        return result
+
+    def update(self, table_name, updates, condition, get_id=False):
+        """
+        Veritabanındaki kaydı günceller.
+
+        Args:
+            table_name (str): Tablo adı.
+            updates (dict): Güncellemeler (örnek: {"name": "Jane Doe"}).
+            condition (str): Koşul (örnek: "id = 1").
+            get_id (bool): İşlem yapılan ID
+        Returns:
+            str: Sorgu sonucu veya JSON formatında hata bilgisi.
+        """
+        update_str = ', '.join(f"{k} = '{json.dumps(v)}'" if isinstance(v, dict) else f"{k} = '{v}'" for k, v in updates.items())
+        query = f"UPDATE {table_name} SET {update_str} WHERE {condition}"
+        if get_id:
+            query += f" RETURNING id;"
+            try:
+                result = self.execute_query(query).split()[2]
+                return {"error": False, "id": int(result)}
+            except ValueError:
+                return self.execute_query(query)
+
+        return self.execute_query(query)
+
+    def delete(self, table_name, condition):
+        """
+        Veritabanındaki kaydı siler.
+
+        Args:
+            table_name (str): Tablo adı.
+            condition (str): Koşul (örnek: "id = 1").
+
+        Returns:
+            str: Sorgu sonucu veya JSON formatında hata bilgisi.
+        """
+        query = f"DELETE FROM {table_name} WHERE {condition};"
+        try:
+            result = int(self.execute_query(query).split()[1])
+            if result == 0:
+                return {"error": True, "status": "record_not_found"}
+            if result > 0:
+                return {"error": False, "status": "record_deleted"}
+        except:
+            return self.execute_query(query)
+
+
 class CemirUtils:
 
-    def __init__(self, data=None, dbname=None, dbuser=None, dbpassword=None, dbhost='localhost', dbport=5432, timeout=3, dbcreate_db_if_not_exists=False):
+    def __init__(self, data=None):
         """
         CemirUtils sınıfının yapıcı fonksiyonu.
         Verilen veriyi sınıfın 'data' değişkenine atar.
@@ -32,18 +343,9 @@ class CemirUtils:
         data (list, dict): İşlenecek sayısal veri listesi veya sözlük.
         """
         self.data = data
-        self.dbname = dbname
-        self.dbuser = dbuser
-        self.dbpassword = dbpassword
-        self.dbhost = dbhost
-        self.dbport = dbport
-        self.timeout = timeout
         self.default_headers = {"User-Agent": "CemirUtils"}
 
-        if dbcreate_db_if_not_exists:
-            self.psql_create_database(dbname)
-
-    def getmethods(self):
+    def get_methods(self):
         """
         CemirUtils sınıfının mevcut tüm metodlarının isimlerini yazdırır.
         """
@@ -123,274 +425,92 @@ class CemirUtils:
         """
         return subprocess.run(["grep", pattern, filename], capture_output=True, text=True).stdout
 
-    def tcp_listen_for_icmp(self, print_query=False, insert_db=True):
-        """
-        NOT: scriptin çalışması için sudo gerektirir.
-
-        Örnek Servis:
-
-        sudo nano /etc/systemd/system/ping_logger.service
-
-            [Unit]
-            Description=Ping Logger Service
-            After=network.target
-
-            [Service]
-            ExecStart=/usr/bin/python3 /path/to/ping_logger.py
-            Restart=always
-            User=root
-            Group=root
-
-            [Install]
-            WantedBy=multi-user.target
-
-        * sudo systemctl daemon-reload
-        * sudo systemctl enable ping_logger
-        * sudo systemctl start ping_logger
-
-        :param insert_db: bool
-        :param print_query: bool
-        :return:
-        """
-        if insert_db:
-            self.psql_insert_raw("""CREATE TABLE ping_log (id SERIAL PRIMARY KEY, contents JSONB NOT NULL);""")
-
-        # Raw soket oluşturma
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
-        except:
-            print("raw soket dinleme işlemleri için sudo yetkisi gerekir!!")
-            exit(1)
-
-        while True:
-            # Paket alımı
-            packet, addr = sock.recvfrom(65565)
-            packet_length = len(packet)
-
-            # IP başlığı ayrıştırma
-            ip_header = packet[0:20]
-            iph = struct.unpack('!BBHHHBBH4s4s', ip_header)
-            version_ihl = iph[0]
-            version = version_ihl >> 4
-            ihl = version_ihl & 0xF
-            iph_length = ihl * 4
-            ttl = iph[5]
-            protocol = iph[6]
-            source_ip = socket.inet_ntoa(iph[8])
-            dest_ip = socket.inet_ntoa(iph[9])
-
-            # ICMP başlığı ayrıştırma
-            icmp_header = packet[iph_length:iph_length + 8]
-            icmph = struct.unpack('!BBHHH', icmp_header)
-            icmp_type = icmph[0]
-            code = icmph[1]
-            checksum = icmph[2]
-            packet_id = icmph[3]
-            sequence = icmph[4]
-
-            if icmp_type == 8:  # Ping Request
-                timestamp = datetime.now()
-                contents = {
-                    "sequence": sequence,
-                    "dest_ip": dest_ip,
-                    "source_ip": source_ip,
-                    "ttl": ttl,
-                    "timestamp": timestamp.isoformat(),
-                    "packet_length": packet_length,
-
-                    # "icmp_type": icmp_type,
-                    # "checksum": checksum,
-                    # "packet_id": packet_id,
-                    # "protocol": protocol
-                }
-
-                if insert_db:
-                    self.psql_insert_raw(f"""INSERT INTO ping_log (contents) VALUES ('{json.dumps(contents)}');""")
-
-                if print_query:
-                    print(contents)
-
-    def psql_parse_psql_output(self, output):
-
-        """
-        psql komutunun çıktısını parse ederek dict yapısına çevirir.
-
-        Args:
-            output (str): psql komutunun çıktısı.
-
-        Returns:
-            dict: Dict formatında çıktı.
-        """
-        lines = output.strip().split('\n')
-        headers = lines[0].split('|')
-        data = []
-
-        for line in lines[2:-1]:  # İlk iki satır ve son satır başlık ve ayırıcılar olduğu için atlanır
-            values = line.split('|')
-            data.append({header.strip(): value.strip() for header, value in zip(headers, values)})
-
-        return data
-
-    def psql_execute_query(self, query, dbname=None):
-        """
-        Veritabanına SQL sorgusu gönderir ve sonucu döndürür.
-
-        Args:
-            query (str): SQL sorgusu.
-            dbname (str, optional): Veritabanı adı. Eğer verilmezse, self.dbname kullanılır.
-
-        Returns:
-            str: Sorgu sonucu veya JSON formatında hata bilgisi.
-        """
-        if dbname is None:
-            dbname = self.dbname
-
-        query = query.replace("\n", "").strip()
-        command = f'''PGPASSWORD={self.dbpassword} psql -h {self.dbhost} -p {self.dbport} -U {self.dbuser} -d {dbname} -c {json.dumps(query, ensure_ascii=False)}'''
-
-        try:
-            result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=self.timeout)
-            if result.returncode != 0:
-                error_info = {
-                    "error": "Query failed",
-                    "message": result.stderr.strip()
-                }
-                return json.dumps(error_info, ensure_ascii=False)
-            return result.stdout.strip()
-        except subprocess.TimeoutExpired as e:
-            error_info = {
-                "error": "TimeOut",
-                "message": f"timed out"
-            }
-            return json.dumps(error_info, ensure_ascii=False)
-
-    def psql_insert_raw(self, query, print_query=False):
-        if print_query: print(query)
-        return self.psql_execute_query(query)
-
-    def psql_insert(self, table_name, columns, values, get_id=False):
-        """
-        Veritabanına yeni kayıt ekler.
-
-        Args:
-            table_name (str): Tablo adı.
-            columns (tuple): Kolon adları (örnek: ("id", "name", "data")).
-            values (tuple): Kolon değerleri (örnek: (1, "John Doe", {"age": 30, "city": "Istanbul"})).
-            get_id (bool): İşlem yapılan ID
-
-        Returns:
-            str: Sorgu sonucu veya JSON formatında hata bilgisi.
-        """
-        columns_str = ', '.join(columns)
-
-        formatted_values = []
-        for value in values:
-            if isinstance(value, dict):
-                formatted_values.append(f"'{json.dumps(value)}'::jsonb")
-            else:
-                formatted_values.append(f"'{value}'")
-
-        values_str = ', '.join(formatted_values)
-        query = f"INSERT INTO {table_name} ({columns_str}) VALUES ({values_str})"
-        if get_id:
-            query += f" RETURNING id;"
-            try:
-                result = self.psql_execute_query(query).split()[2]
-                return {"error": False, "id": int(result)}
-            except ValueError:
-                return self.psql_execute_query(query)
-
-        return self.psql_execute_query(query)
-
-    def psql_create_database(self, dbname):
-        """
-        Belirtilen ad ile yeni bir veritabanı oluşturur.
-
-        Args:
-            dbname (str): Oluşturulacak veritabanının adı.
-
-        Returns:
-            str: Sorgu sonucu veya JSON formatında hata bilgisi.
-        """
-        query = f"CREATE DATABASE {dbname};"
-        return self.psql_execute_query(query, dbname='postgres')
-
-    def psql_create_table(self, table_name, schema):
-        """
-        Veritabanında tablo oluşturur.
-
-        Args:
-            table_name (str): Tablo adı.
-            schema (str): Tablo şeması (örnek: "id SERIAL PRIMARY KEY, name VARCHAR(100), data JSONB").
-
-        Returns:
-            str: Sorgu sonucu veya JSON formatında hata bilgisi.
-        """
-        query = f"CREATE TABLE {table_name} ({schema});"
-        return self.psql_execute_query(query)
-
-    def psql_read(self, table_name, columns='*', condition=None):
-        if isinstance(columns, tuple):
-            columns = ', '.join(columns)
-
-        query = f"SELECT {columns} FROM {table_name}"
-
-        if condition:
-            query += f" WHERE {condition}"
-
-        query += ";"
-
-        result = self.psql_parse_psql_output(self.psql_execute_query(query))
-
-        if len(result) == 1:
-            print(result[0], type(result[0]))
-            return result[0]
-        return result
-
-    def psql_update(self, table_name, updates, condition, get_id=False):
-        """
-        Veritabanındaki kaydı günceller.
-
-        Args:
-            table_name (str): Tablo adı.
-            updates (dict): Güncellemeler (örnek: {"name": "Jane Doe"}).
-            condition (str): Koşul (örnek: "id = 1").
-            get_id (bool): İşlem yapılan ID
-        Returns:
-            str: Sorgu sonucu veya JSON formatında hata bilgisi.
-        """
-        update_str = ', '.join(f"{k} = '{json.dumps(v)}'" if isinstance(v, dict) else f"{k} = '{v}'" for k, v in updates.items())
-        query = f"UPDATE {table_name} SET {update_str} WHERE {condition}"
-        if get_id:
-            query += f" RETURNING id;"
-            try:
-                result = self.psql_execute_query(query).split()[2]
-                return {"error": False, "id": int(result)}
-            except ValueError:
-                return self.psql_execute_query(query)
-
-        return self.psql_execute_query(query)
-
-    def psql_delete(self, table_name, condition):
-        """
-        Veritabanındaki kaydı siler.
-
-        Args:
-            table_name (str): Tablo adı.
-            condition (str): Koşul (örnek: "id = 1").
-
-        Returns:
-            str: Sorgu sonucu veya JSON formatında hata bilgisi.
-        """
-        query = f"DELETE FROM {table_name} WHERE {condition};"
-        try:
-            result = int(self.psql_execute_query(query).split()[1])
-            if result == 0:
-                return {"error": True, "status": "record_not_found"}
-            if result > 0:
-                return {"error": False, "status": "record_deleted"}
-        except:
-            return self.psql_execute_query(query)
+    # def tcp_listen_for_icmp(self, print_query=False, insert_db=True):
+    #     """
+    #     NOT: scriptin çalışması için sudo gerektirir.
+    #
+    #     Örnek Servis:
+    #
+    #     sudo nano /etc/systemd/system/ping_logger.service
+    #
+    #         [Unit]
+    #         Description=Ping Logger Service
+    #         After=network.target
+    #
+    #         [Service]
+    #         ExecStart=/usr/bin/python3 /path/to/ping_logger.py
+    #         Restart=always
+    #         User=root
+    #         Group=root
+    #
+    #         [Install]
+    #         WantedBy=multi-user.target
+    #
+    #     * sudo systemctl daemon-reload
+    #     * sudo systemctl enable ping_logger
+    #     * sudo systemctl start ping_logger
+    #
+    #     :param insert_db: bool
+    #     :param print_query: bool
+    #     :return:
+    #     """
+    #     if insert_db:
+    #         self.insert_raw("""CREATE TABLE ping_log (id SERIAL PRIMARY KEY, contents JSONB NOT NULL);""")
+    #
+    #     # Raw soket oluşturma
+    #     try:
+    #         sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+    #     except:
+    #         print("raw soket dinleme işlemleri için sudo yetkisi gerekir!!")
+    #         exit(1)
+    #
+    #     while True:
+    #         # Paket alımı
+    #         packet, addr = sock.recvfrom(65565)
+    #         packet_length = len(packet)
+    #
+    #         # IP başlığı ayrıştırma
+    #         ip_header = packet[0:20]
+    #         iph = struct.unpack('!BBHHHBBH4s4s', ip_header)
+    #         version_ihl = iph[0]
+    #         version = version_ihl >> 4
+    #         ihl = version_ihl & 0xF
+    #         iph_length = ihl * 4
+    #         ttl = iph[5]
+    #         protocol = iph[6]
+    #         source_ip = socket.inet_ntoa(iph[8])
+    #         dest_ip = socket.inet_ntoa(iph[9])
+    #
+    #         # ICMP başlığı ayrıştırma
+    #         icmp_header = packet[iph_length:iph_length + 8]
+    #         icmph = struct.unpack('!BBHHH', icmp_header)
+    #         icmp_type = icmph[0]
+    #         code = icmph[1]
+    #         checksum = icmph[2]
+    #         packet_id = icmph[3]
+    #         sequence = icmph[4]
+    #
+    #         if icmp_type == 8:  # Ping Request
+    #             timestamp = datetime.now()
+    #             contents = {
+    #                 "sequence": sequence,
+    #                 "dest_ip": dest_ip,
+    #                 "source_ip": source_ip,
+    #                 "ttl": ttl,
+    #                 "timestamp": timestamp.isoformat(),
+    #                 "packet_length": packet_length,
+    #
+    #                 # "icmp_type": icmp_type,
+    #                 # "checksum": checksum,
+    #                 # "packet_id": packet_id,
+    #                 # "protocol": protocol
+    #             }
+    #
+    #             if insert_db:
+    #                 self.insert_raw(f"""INSERT INTO ping_log (contents) VALUES ('{json.dumps(contents)}');""")
+    #
+    #             if print_query:
+    #                 print(contents)
 
     def time_days_between_dates(self, date1, date2):
         """
@@ -486,8 +606,6 @@ class CemirUtils:
         Args:
             date (str): Başlangıç tarihi (YYYY-MM-DD formatında).
             days (int): Eklenecek gün sayısı.
-            locale (str): Dil kodu (varsayılan 'en').
-
 
         Returns:
             str: Formatlanmış yeni tarih ve gün adı.
@@ -886,7 +1004,7 @@ class CemirUtils:
 
         Örnek:
         >>> ceml = CemirUtils([[1, 2], [3, 4], [5]])
-        >>> ceml.flatten_list()
+        >>> ceml.list_flatten()
         [1, 2, 3, 4, 5]
         """
         if isinstance(self.data, list) and all(isinstance(i, list) for i in self.data):

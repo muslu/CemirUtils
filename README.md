@@ -2,7 +2,6 @@
 
 # CemirUtils
 
-## CemirUtils;
 ### Linux ve Pythonda sık kullanılan tüm komut ve kütüphaneleri tek yerden, basit veri işleme işlevlerini içeren bir Python yardımcı kütüphanesidir.
 
 ## Kurulum
@@ -10,14 +9,15 @@
 ```bash
 wget https://bootstrap.pypa.io/get-pip.py
 
-## Kurulum şekilleri
+## PIP Kurulumu
 python3.9 get-pip.py pip cemirutils
 sudo python3.9 get-pip.py pip cemirutils
 
 ## Güncelleme
 pip install -U pip cemirutils
-sudo pip install -U pip cemirutils
 python3.9 -m pip install -U pip cemirutils
+
+sudo pip install -U pip cemirutils
 sudo python3.9 -m pip install -U pip cemirutils
 
 ## Kontrol
@@ -29,50 +29,24 @@ pip freeze | grep cemir
 # Kullanım Örnekleri
 
 
-PING/ICMP takip ve dbye kayıt ettirmek.
+## IPGeolocation işlemleri.
 
-```shell
-sudo nano /usr/bin/ping_logger.py
+```python
+from cemirutils.utils import IPGeolocation
 
-from cemirutils import CemirUtils
-utils = CemirUtils(data=False, dbname='test_db3', dbuser='postgres', dbpassword='asd', dbport=5435, dbcreate_db_if_not_exists=True)
-utils.tcp_listen_for_icmp(print_query=True, insert_db=True)
+ip_geolocator = IPGeolocation()
+
+## CSV -> SQLite
+# ip_geolocator.create_sqlite_db()
+
+#
+ip_address = "121.0.11.0"
+# # IP adresinin lokasyon bilgisini al (Zip dosyasını tekrar indir)
+location_info = ip_geolocator.get_ip_location(ip_address, force_download=False)
+print(location_info)
 ```
-
-```shell
-sudo nano /etc/systemd/system/ping_logger.service
-
-[Unit]
-Description=Ping Logger Service
-After=network.target
-
-[Service]
-ExecStart=/usr/bin/python3.9 /usr/bin/ping_logger.py
-WorkingDirectory=/usr/bin/
-Restart=always
-User=root
-Group=root
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```shell
-sudo chmod +x /usr/bin/ping_logger.py
-sudo systemctl daemon-reload
-sudo systemctl enable ping_logger
-sudo systemctl restart ping_logger
-sudo systemctl status ping_logger
-journalctl -xe
-```
-
-
-
-
-
 
 ## PostgreSQL için CRUD işlemleri.
-
 ```python
 from cemirutils import CemirUtils, Dict2Dot
 
@@ -236,3 +210,42 @@ print(cemd.dict_filter_by_key('name'))
 print(cemd.dict_merge({'a': 1}, {'b': 2}))
 
 ````
+
+
+
+PING/ICMP takip ve dbye kayıt ettirmek.
+
+```shell
+sudo nano /usr/bin/ping_logger.py
+
+from cemirutils import CemirUtils
+utils = CemirUtils(data=False, dbname='test_db3', dbuser='postgres', dbpassword='asd', dbport=5435, dbcreate_db_if_not_exists=True)
+utils.tcp_listen_for_icmp(print_query=True, insert_db=True)
+```
+
+```shell
+sudo nano /etc/systemd/system/ping_logger.service
+
+[Unit]
+Description=Ping Logger Service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3.9 /usr/bin/ping_logger.py
+WorkingDirectory=/usr/bin/
+Restart=always
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```shell
+sudo chmod +x /usr/bin/ping_logger.py
+sudo systemctl daemon-reload
+sudo systemctl enable ping_logger
+sudo systemctl restart ping_logger
+sudo systemctl status ping_logger
+journalctl -xe
+```
